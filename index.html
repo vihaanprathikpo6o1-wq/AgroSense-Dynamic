@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroSense Monitor</title>
+    <!-- Load Poppins Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for modern aesthetic and mobile focus */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .card {
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            border: 1px solid #e2e8f0; /* Subtle border for definition */
+        }
+        .alert-log {
+            list-style-type: none;
+            padding: 0;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .log-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+            transition: background-color 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-item.critical {
+            background-color: #fee2e2; /* Red-100 */
+            color: #ef4444; /* Red-500 */
+            font-weight: 600;
+        }
+        .log-item:last-child {
+            border-bottom: none;
+        }
+        .language-btn {
+            /* Ensure these look like solid buttons */
+            @apply px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg transition duration-150 ease-in-out hover:bg-gray-300 shadow-sm;
+        }
+        .language-btn.active {
+            @apply bg-green-600 text-white hover:bg-green-700 font-semibold shadow-md;
+        }
+        /* Toast Notification Styling (Pop-ups) */
+        #toastContainer {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        .toast {
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+            transform: translateY(-20px);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.t2 { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+        .toast.t3 { background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; font-weight: bold; }
+
+        /* Power Bar Styling */
+        .power-bar-container {
+            height: 10px;
+            background-color: #e5e7eb;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .power-bar {
+            height: 100%;
+            transition: width 0.5s, background-color 0.5s;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <!-- Toast Notification Container -->
+    <div id="toastContainer"></div>
+
+    <div class="max-w-xl mx-auto">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-extrabold text-green-700">AgroSense Farm Monitor</h1>
+            <p class="text-gray-500" id="motto">Smart Defense, Sustainable Yield.</p>
+        </header>
+
+        <!-- Language Selector -->
+        <div class="card mb-6">
+            <h2 class="text-lg font-semibold mb-3 text-gray-700" id="langTitle">Select Language</h2>
+            <div id="languageButtons" class="flex flex-wrap justify-center gap-2">
+                <button class="language-btn active" data-lang="en">English</button>
+                <button class="language-btn" data-lang="hi">हिंदी</button>
+                <button class="language-btn" data-lang="te">తెలుగు</button>
+                <button class="language-btn" data-lang="kn">ಕನ್ನಡ</button>
+                <button class="language-btn" data-lang="ml">മലയാളം</button>
+                <button class="language-btn" data-lang="ta">தமிழ்</button>
+            </div>
+        </div>
+
+        <!-- Card 1: Connection & Status -->
+        <div class="card text-center">
+            <p class="text-lg font-medium mb-4" id="connStatusLabel">BLE Connection Status:</p>
+            <p id="connectionStatus" class="font-extrabold text-2xl text-red-500">Disconnected</p>
+            <button id="connectButton" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 shadow-md">
+                Connect to System
+            </button>
+        </div>
+
+        <!-- NEW CARD 2: Power Status (MOVED UP) -->
+        <div class="card">
+            <h2 class="text-xl font-semibold mb-3 text-indigo-700" id="powerTitle">Power Status</h2>
+            <div class="space-y-3">
+                <p class="text-base flex justify-between items-center">
+                    <span id="usageLabel" class="font-medium">Current Usage:</span>
+                    <span id="powerUsageValue" class="font-bold text-gray-700">-- W</span>
+                </p>
+                <p class="text-base">
+                    <span id="leftLabel" class="font-medium">Battery Left:</span>
+                    <span id="powerLeftValue" class="font-bold text-gray-700 ml-2">-- %</span>
+                    <span id="batteryWarning" class="ml-2 text-xs text-red-600 font-semibold hidden"></span>
+                </p>
+                <div class="power-bar-container">
+                    <div id="powerBar" class="power-bar bg-green-500" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OLD CARD 2: Tier 1 Status (Micro-Pest) -->
+        <div class="card">
+            <h2 class="text-xl font-semibold mb-3 text-green-700" id="tier1Title">Tier 1 Status (Micro-Pest)</h2>
+            <p class="text-lg flex justify-between items-center">
+                <span id="strobeLabel">Strobe Deterrent:</span>
+                <span id="strobeStatus" class="font-bold text-gray-500">Inactive</span>
+            </p>
+        </div>
+
+        <!-- Card 4: Tier 2 Alerts Log (Wildlife) -->
+        <div class="card">
+            <h2 class="text-xl font-semibold mb-3 text-green-700" id="tier2Title">Tier 2 Alerts (Wildlife)</h2>
+            <div class="bg-gray-50 rounded-lg border border-gray-200">
+                <ul id="tier2Log" class="alert-log divide-y divide-gray-200">
+                    <li class="log-item text-gray-500" id="tier2Initial">Awaiting Tier 2 alerts...</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Card 5: Tier 3 Alerts Log (Theft) -->
+        <div class="card">
+            <h2 class="text-xl font-semibold mb-3 text-red-700" id="tier3Title">Tier 3 Alerts (Theft)</h2>
+            <div class="bg-gray-50 rounded-lg border border-gray-200">
+                <ul id="tier3Log" class="alert-log divide-y divide-gray-200">
+                    <li class="log-item text-gray-500" id="tier3Initial">Awaiting Tier 3 alerts...</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GATT UUIDS (Placeholders) ---
+        const AGROSENSE_SERVICE_UUID = '0000ff00-1212-efde-1523-785fef13cc22';
+        const STROBE_STATUS_CHAR_UUID = '0000ff01-1212-efde-1523-785fef13cc22';
+        const ALERTS_CHAR_UUID = '0000ff02-1212-efde-1523-785fef13cc22';
+        
+        // --- State and DOM Elements ---
+        let currentLanguage = 'en';
+        let simulationTimer;
+        let powerTimer;
+        let isConnected = false;
+        let powerLeft = 100.0;
+        let strobeStatusIndex = 0;
+        const strobeStatusKeys = ['strobeInactive', 'strobeStatusChecking', 'strobeStatusLow', 'strobeStatusHigh'];
+        const theftLocations = ['Motor Room', 'Storage Shed', 'Main Gate', 'Perimeter Fence'];
+        let locationIndex = 0;
+
+
+        const connectionStatusElement = document.getElementById('connectionStatus');
+        const connectButton = document.getElementById('connectButton');
+        const strobeStatusElement = document.getElementById('strobeStatus');
+        const toastContainer = document.getElementById('toastContainer');
+        const langButtons = document.querySelectorAll('.language-btn');
+        const powerUsageValue = document.getElementById('powerUsageValue');
+        const powerLeftValue = document.getElementById('powerLeftValue');
+        const powerBar = document.getElementById('powerBar');
+        const batteryWarning = document.getElementById('batteryWarning');
+        
+        const tier2Log = document.getElementById('tier2Log');
+        const tier3Log = document.getElementById('tier3Log');
+
+
+        // --- Translation Data ---
+        const translations = {
+            en: {
+                motto: 'Smart Defense, Sustainable Yield.',
+                langTitle: 'Select Language',
+                connStatusLabel: 'BLE Connection Status:',
+                connect: 'Connect to System',
+                connected: 'Connected!',
+                disconnected: 'Disconnected',
+                strobeLabel: 'Strobe Deterrent:',
+                tier1Title: 'Tier 1 Status (Micro-Pest)',
+                tier2Title: 'Tier 2 Alerts (Wildlife)',
+                tier3Title: 'Tier 3 Alerts (Theft)',
+                powerTitle: 'Power Status',
+                usageLabel: 'Current Usage:',
+                leftLabel: 'Battery Left:',
+                lowBattery: 'LOW BATTERY!',
+                tier2Initial: 'Awaiting Tier 2 alerts...',
+                tier3Initial: 'Awaiting Tier 3 alerts...',
+                connecting: 'Connecting...',
+                readingStatus: 'Connected. Reading Status...',
+                strobeInactive: 'Inactive',
+                strobeStatusChecking: 'Checking...',
+                strobeStatusLow: 'Active (Low Intensity)',
+                strobeStatusHigh: 'Active (High Intensity)',
+                wildlifeAlertMsg: 'Wildlife Detected. Deterrent Activated.',
+                theftAlertMsg: (loc) => `CRITICAL: Movement detected in ${loc}. Possible theft alert; please check immediately.`,
+                connectionFailed: 'Connection Failed.',
+                connectionLost: 'Connection Lost. Reconnect.',
+                toastT2: '🚨 WILDLIFE ALERT',
+                toastT3: '🛑 THEFT ALERT'
+            },
+            hi: {
+                motto: 'स्मार्ट रक्षा, टिकाऊ उपज।',
+                langTitle: 'भाषा चयन',
+                connStatusLabel: 'बीएलई कनेक्शन स्थिति:',
+                connect: 'सिस्टम से कनेक्ट करें',
+                connected: 'कनेक्टेड!',
+                disconnected: 'डिस्कनेक्टेड',
+                strobeLabel: 'स्ट्रोब निवारक:',
+                tier1Title: 'टियर 1 स्थिति (छोटे कीट)',
+                tier2Title: 'टियर 2 अलर्ट (जंगली जानवर)',
+                tier3Title: 'टियर 3 अलर्ट (चोरी)',
+                powerTitle: 'पावर स्थिति',
+                usageLabel: 'वर्तमान उपयोग:',
+                leftLabel: 'बैटरी शेष:',
+                lowBattery: 'बैटरी कम है!',
+                tier2Initial: 'टियर 2 अलर्ट की प्रतीक्षा है...',
+                tier3Initial: 'टियर 3 अलर्ट की प्रतीक्षा है...',
+                connecting: 'कनेक्ट हो रहा है...',
+                readingStatus: 'कनेक्टेड। स्थिति पढ़ रहा है...',
+                strobeInactive: 'निष्क्रिय',
+                strobeStatusChecking: 'जाँच कर रहा है...',
+                strobeStatusLow: 'सक्रिय (कम तीव्रता)',
+                strobeStatusHigh: 'सक्रिय (उच्च तीव्रता)',
+                wildlifeAlertMsg: 'जंगली जानवर का पता चला। निवारक सक्रिय!',
+                theftAlertMsg: (loc) => `गंभीर: ${loc} में हलचल पाई गई। चोरी की आशंका; कृपया तुरंत जाँच करें।`,
+                connectionFailed: 'कनेक्शन विफल।',
+                connectionLost: 'कनेक्शन टूट गया। पुनः कनेक्ट करें।',
+                toastT2: '🚨 जंगली जानवर अलर्ट',
+                toastT3: '🛑 चोरी अलर्ट'
+            },
+            te: {
+                motto: 'స్మార్ట్ రక్షణ, సుస్థిర దిగుబడి.',
+                langTitle: 'భాషా ఎంపిక',
+                connStatusLabel: 'BLE కనెక్షన్ స్థితి:',
+                connect: 'సిస్టమ్‌కి కనెక్ట్ చేయండి',
+                connected: 'కనెక్ట్ అయ్యింది!',
+                disconnected: 'డిస్‌కనెక్ట్ అయ్యింది',
+                strobeLabel: 'స్ట్రోబ్ నిరోధకం:',
+                tier1Title: 'టైర్ 1 స్థితి (సూక్ష్మ కీటకాలు)',
+                tier2Title: 'టైర్ 2 అలర్ట్‌లు (వన్యప్రాణులు)',
+                tier3Title: 'టైర్ 3 అలర్ట్‌లు (దొంగతనం)',
+                powerTitle: 'పవర్ స్థితి',
+                usageLabel: 'ప్రస్తుత వినియోగం:',
+                leftLabel: 'బ్యాటరీ మిగిలింది:',
+                lowBattery: 'బ్యాటరీ తక్కువ!',
+                tier2Initial: 'టైర్ 2 హెచ్చరికల కోసం వేచి ఉంది...',
+                tier3Initial: 'టైర్ 3 హెచ్చరికల కోసం వేచి ఉంది...',
+                connecting: 'కనెక్ట్ అవుతోంది...',
+                readingStatus: 'కనెక్ట్ అయ్యింది. స్థితి చదువుతోంది...',
+                strobeInactive: 'నిష్క్రియం',
+                strobeStatusChecking: 'తనిఖీ చేస్తోంది...',
+                strobeStatusLow: 'క్రియాశీలం (తక్కువ తీవ్రత)',
+                strobeStatusHigh: 'క్రియాశీలం (ఎక్కువ తీవ్రత)',
+                wildlifeAlertMsg: 'వన్యప్రాణులు గుర్తించబడ్డాయి. నిరోధకం సక్రియం చేయబడింది.',
+                theftAlertMsg: (loc) => `క్లిష్టమైన: ${loc} లో కదలిక గుర్తించబడింది. దొంగతనం అయ్యే అవకాశం; దయచేసి వెంటనే తనిఖీ చేయండి.`,
+                connectionFailed: 'కనెక్షన్ విఫలం.',
+                connectionLost: 'కనెక్షన్ పోయింది. తిరిగి కనెక్ట్ చేయండి.',
+                toastT2: '🚨 వన్యప్రాణి హెచ్చరిక',
+                toastT3: '🛑 దొంగతనం హెచ్చరిక'
+            },
+            kn: {
+                motto: 'ಸ್ಮಾರ್ಟ್ ರಕ್ಷಣೆ, ಸುಸ್ಥಿರ ಇಳುವರಿ.',
+                langTitle: 'ಭಾಷಾ ಆಯ್ಕೆ',
+                connStatusLabel: 'BLE ಸಂಪರ್ಕ ಸ್ಥಿತಿ:',
+                connect: 'ಸಿಸ್ಟಮ್‌ಗೆ ಸಂಪರ್ಕಿಸಿ',
+                connected: 'ಸಂಪರ್ಕಿತವಾಗಿದೆ!',
+                disconnected: 'ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ',
+                strobeLabel: 'ಸ್ಟ್ರೋಬ್ ನಿರೋಧಕ:',
+                tier1Title: 'ಶ್ರೇಣಿ 1 ಸ್ಥಿತಿ (ಸೂಕ್ಷ್ಮ ಕೀಟ)',
+                tier2Title: 'ಶ್ರೇಣಿ 2 ಎಚ್ಚರಿಕೆಗಳು (ವನ್ಯಜೀವಿ)',
+                tier3Title: 'ಶ್ರೇಣಿ 3 ಎಚ್ಚರಿಕೆಗಳು (ಕಳ್ಳತನ)',
+                powerTitle: 'ಪವರ್ ಸ್ಥಿತಿ',
+                usageLabel: 'ಪ್ರಸ್ತುತ ಬಳಕೆ:',
+                leftLabel: 'ಬ್ಯಾಟರಿ ಉಳಿದಿದೆ:',
+                lowBattery: 'ಕಡಿಮೆ ಬ್ಯಾಟರಿ!',
+                tier2Initial: 'ಶ್ರೇಣಿ 2 ಎಚ್ಚರಿಕೆಗಳಿಗಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ...',
+                tier3Initial: 'ಶ್ರೇಣಿ 3 ಎಚ್ಚರಿಕೆಗಳಿಗಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ...',
+                connecting: 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ...',
+                readingStatus: 'ಸಂಪರ್ಕಿತವಾಗಿದೆ. ಸ್ಥಿತಿಯನ್ನು ಓದುತ್ತಿದೆ...',
+                strobeInactive: 'ನಿಷ್ಕ್ರಿಯ',
+                strobeStatusChecking: 'ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...',
+                strobeStatusLow: 'ಸಕ್ರಿಯ (ಕಡಿಮೆ ತೀವ್ರತೆ)',
+                strobeStatusHigh: 'ಸಕ್ರಿಯ (ಹೆಚ್ಚಿನ ತೀವ್ರತೆ)',
+                wildlifeAlertMsg: 'ವನ್ಯಜೀವಿ ಪತ್ತೆಯಾಗಿದೆ. ನಿರೋಧಕ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.',
+                theftAlertMsg: (loc) => `ವಿಮರ್ಶಾತ್ಮಕ: ${loc} ನಲ್ಲಿ ಚಲನೆ ಕಂಡುಬಂದಿದೆ. ಕಳ್ಳತನದ ಸಾಧ್ಯತೆ; ದಯವಿಟ್ಟು ತಕ್ಷಣ ಪರಿಶೀಲಿಸಿ.`,
+                connectionFailed: 'ಸಂಪರ್ಕ ವಿಫಲವಾಗಿದೆ.',
+                connectionLost: 'ಸಂಪರ್ಕ ಕಳೆದುಹೋಗಿದೆ. ಮರುಸಂಪರ್ಕಿಸಿ.',
+                toastT2: '🚨 ವನ್ಯಜೀವಿ ಎಚ್ಚರಿಕೆ',
+                toastT3: '🛑 ಕಳ್ಳತನ ಎಚ್ಚರಿಕೆ'
+            },
+            ml: {
+                motto: 'സ്മാർട്ട് പ്രതിരോധം, സുസ്ഥിര വിളവ്.',
+                langTitle: 'ഭാഷ തിരഞ്ഞെടുക്കുക',
+                connStatusLabel: 'BLE ബന്ധിപ്പിക്കൽ നില:',
+                connect: 'സിസ്റ്റത്തിലേക്ക് ബന്ധിപ്പിക്കുക',
+                connected: 'ബന്ധിപ്പിച്ചു!',
+                disconnected: 'വിച്ഛേദിച്ചു',
+                strobeLabel: 'സ്ട്രോബ് പ്രതിരോധം:',
+                tier1Title: 'തലം 1 നില (മൈക്രോ-കീടം)',
+                tier2Title: 'തലം 2 അലേർട്ടുകൾ (വന്യജീവി)',
+                tier3Title: 'തലം 3 അലേർട്ടുകൾ (മോഷണം)',
+                powerTitle: 'പവർ നില',
+                usageLabel: 'നിലവിലെ ഉപയോഗം:',
+                leftLabel: 'ബാറ്ററി ശേഷിക്കുന്നു:',
+                lowBattery: 'ബാറ്ററി കുറവ്!',
+                tier2Initial: 'തലം 2 അലേർട്ടുകൾക്കായി കാത്തിരിക്കുന്നു...',
+                tier3Initial: 'തലം 3 അലേർട്ടുകൾക്കായി കാത്തിരിക്കുന്നു...',
+                connecting: 'ബന്ധിപ്പിക്കുന്നു...',
+                readingStatus: 'ബന്ധിപ്പിച്ചു. നില വായിക്കുന്നു...',
+                strobeInactive: 'നിഷ്ക്രിയം',
+                strobeStatusChecking: 'പരിശോധിക്കുന്നു...',
+                strobeStatusLow: 'സജീവം (കുറഞ്ഞ തീവ്രത)',
+                strobeStatusHigh: 'സജീവം (ഉയർന്ന തീവ്രത)',
+                wildlifeAlertMsg: 'വന്യജീവികളെ കണ്ടെത്തി. പ്രതിരോധം സജീവമാക്കി.',
+                theftAlertMsg: (loc) => `ഗുരുതരം: ${loc} ൽ ചലനം കണ്ടെത്തി. മോഷണ സാധ്യത; ദയവായി ഉടൻ പരിശോധിക്കുക.`,
+                connectionFailed: 'ബന്ധിപ്പിക്കൽ പരാജയപ്പെട്ടു.',
+                connectionLost: 'ബന്ധം നഷ്‌ടപ്പെട്ടു. വീണ്ടും ബന്ധിപ്പിക്കുക.',
+                toastT2: '🚨 വന്യജീവി അലേർട്ട്',
+                toastT3: '🛑 മോഷണം അലേർട്ട്'
+            },
+            ta: {
+                motto: 'ஸ்மார்ட் பாதுகாப்பு, நிலையான மகசூல்.',
+                langTitle: 'மொழி தேர்வு',
+                connStatusLabel: 'BLE இணைப்பு நிலை:',
+                connect: 'சிஸ்டத்துடன் இணைக்கவும்',
+                connected: 'இணைக்கப்பட்டது!',
+                disconnected: 'துண்டிக்கப்பட்டது',
+                strobeLabel: 'ஸ்ட்ரோப் தடுப்பு:',
+                tier1Title: 'நிலை 1 நிலை (நுண்ணிய பூச்சி)',
+                tier2Title: 'நிலை 2 விழிப்பூட்டல்கள் (வனவிலங்கு)',
+                tier3Title: 'நிலை 3 விழிப்பூட்டல்கள் (திருட்டு)',
+                powerTitle: 'பவர் நிலை',
+                usageLabel: 'தற்போதைய பயன்பாடு:',
+                leftLabel: 'பேட்டரி மீதம்:',
+                lowBattery: 'குறைந்த பேட்டரி!',
+                tier2Initial: 'நிலை 2 விழிப்பூட்டல்களுக்காக காத்திருக்கிறது...',
+                tier3Initial: 'நிலை 3 விழிப்பூட்டல்களுக்காக காத்திருக்கிறது...',
+                connecting: 'இணைக்கிறது...',
+                readingStatus: 'இணைக்கப்பட்டது. நிலை படிக்கிறது...',
+                strobeInactive: 'செயலற்றது',
+                strobeStatusChecking: 'சரிபார்க்கிறது...',
+                strobeStatusLow: 'செயலில் உள்ளது (குறைந்த தீவிரம்)',
+                strobeStatusHigh: 'செயலில் உள்ளது (அதிக தீவிரம்)',
+                wildlifeAlertMsg: 'வனவிலங்கு கண்டறியப்பட்டது. தடுப்பான் இயக்கப்பட்டது.',
+                theftAlertMsg: (loc) => `முக்கியமான: ${loc} இல் அசைவு கண்டறியப்பட்டது. திருட்டு எச்சரிக்கை; தயவுசெய்து உடனே சரிபார்க்கவும்.`,
+                connectionFailed: 'இணைப்பு தோல்வியடைந்தது.',
+                connectionLost: 'இணைப்பு துண்டிக்கப்பட்டது. மீண்டும் இணைக்கவும்.',
+                toastT2: '🚨 வனவிலங்கு விழிப்பூட்டல்',
+                toastT3: '🛑 திருட்டு விழிப்பூட்டல்'
+            }
+        };
+
+        // --- Core Functions ---
+
+        // Shows a transient pop-up notification
+        function showToast(message, type, duration = 5000) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type} transition duration-500 ease-in-out`;
+            
+            let toastMessage = message;
+            if (typeof message === 'function') {
+                const loc = theftLocations[locationIndex];
+                toastMessage = message(loc);
+            }
+
+            toast.innerHTML = `<span class="font-bold">${type === 't2' ? translations[currentLanguage].toastT2 : translations[currentLanguage].toastT3}</span><br>${toastMessage}`;
+            
+            toastContainer.prepend(toast);
+            
+            // Apply show class after a short delay for animation
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            // Remove after duration
+            setTimeout(() => {
+                toast.classList.remove('show');
+                // Wait for transition to finish before removal
+                setTimeout(() => toast.remove(), 500);
+            }, duration);
+        }
+
+        // Logs the alert to the correct tab list
+        function logAlert(message, isCritical) {
+            const t = translations[currentLanguage];
+            const logElement = isCritical ? tier3Log : tier2Log;
+            
+            // Clear initial messages if needed
+            if (logElement.querySelector(`#tier${isCritical ? 3 : 2}Initial`)) {
+                logElement.innerHTML = '';
+            }
+            
+            const time = new Date().toLocaleTimeString();
+            const listItem = document.createElement('li');
+            listItem.classList.add('log-item');
+            if (isCritical) listItem.classList.add('critical');
+            
+            // Handle functional theft message
+            let displayMessage = message;
+            if (isCritical && typeof message === 'function') {
+                displayMessage = message(theftLocations[locationIndex]);
+            }
+            
+            listItem.innerHTML = `
+                <span class="flex-grow">${displayMessage}</span>
+                <span class="text-xs text-gray-500">${time}</span>
+            `;
+            
+            logElement.prepend(listItem);
+            
+            // Show toast notification
+            showToast(message, isCritical ? 't3' : 't2');
+
+            // Keep the log clean (max 8 items)
+            while (logElement.children.length > 8) {
+                logElement.removeChild(logElement.lastChild);
+            }
+        }
+        
+        function updateStrobeStatus(key) {
+            const t = translations[currentLanguage];
+            strobeStatusElement.textContent = t[key];
+            
+            strobeStatusElement.classList.remove('text-gray-500', 'text-blue-500', 'text-yellow-600', 'text-green-600');
+
+            if (key === 'strobeInactive') {
+                strobeStatusElement.classList.add('text-gray-500');
+            } else if (key === 'strobeStatusChecking') {
+                strobeStatusElement.classList.add('text-blue-500');
+            } else if (key === 'strobeStatusLow') {
+                strobeStatusElement.classList.add('text-yellow-600');
+            } else if (key === 'strobeStatusHigh') {
+                strobeStatusElement.classList.add('text-green-600');
+            }
+        }
+
+        function simulatePower() {
+            const minDrain = 0.05; // 0.05% drain per interval
+            const maxDrain = 0.5; // 0.5% drain per interval
+            const usageMin = 10;
+            const usageMax = 50;
+            
+            powerTimer = setInterval(() => {
+                // 1. Simulate Power Drain
+                const currentUsage = Math.floor(Math.random() * (usageMax - usageMin + 1)) + usageMin;
+                const drainRate = currentUsage / 1000 * (Math.random() * (maxDrain - minDrain) + minDrain);
+                
+                powerLeft = Math.max(0, powerLeft - drainRate);
+                
+                // 2. Update DOM
+                const percentage = powerLeft.toFixed(1);
+                powerUsageValue.textContent = `${currentUsage} W`;
+                powerLeftValue.textContent = `${percentage} %`;
+                powerBar.style.width = `${percentage}%`;
+
+                // 3. Update Bar Color based on level and display warning
+                batteryWarning.textContent = '';
+                batteryWarning.classList.add('hidden');
+
+                if (powerLeft > 40) {
+                    powerBar.className = 'power-bar bg-green-500';
+                } else if (powerLeft > 15) {
+                    powerBar.className = 'power-bar bg-yellow-500';
+                } else {
+                    powerBar.className = 'power-bar bg-red-600';
+                    batteryWarning.textContent = translations[currentLanguage].lowBattery;
+                    batteryWarning.classList.remove('hidden');
+                }
+
+                if (powerLeft === 0) {
+                    clearInterval(powerTimer);
+                    connectionStatusElement.textContent = translations[currentLanguage].connectionLost;
+                    connectionStatusElement.classList.remove('text-green-600');
+                    connectionStatusElement.classList.add('text-red-500');
+                    isConnected = false;
+                    clearInterval(simulationTimer);
+                }
+            }, 3000); 
+        }
+        
+        // Simulates receiving BLE notifications (Tier 1, 2 & 3)
+        function simulateAlerts() {
+            let alertCounter = 0;
+            const t = translations[currentLanguage];
+            
+            // Initialize/clear logs with the correct language message
+            tier2Log.innerHTML = `<li class="log-item text-gray-500" id="tier2Initial">${t.tier2Initial}</li>`;
+            tier3Log.innerHTML = `<li class="log-item text-gray-500" id="tier3Initial">${t.tier3Initial}</li>`;
+
+            // Reset indexes
+            strobeStatusIndex = 0;
+            locationIndex = 0;
+
+            simulationTimer = setInterval(() => {
+                alertCounter++;
+                
+                // 1. Update Tier 1 Status (Micro-Pest)
+                strobeStatusIndex = (strobeStatusIndex + 1) % strobeStatusKeys.length;
+                updateStrobeStatus(strobeStatusKeys[strobeStatusIndex]);
+
+                if (alertCounter % 4 === 0) {
+                    // 2. Tier 3: Critical Alert (Theft)
+                    logAlert(t.theftAlertMsg, true);
+                    locationIndex = (locationIndex + 1) % theftLocations.length; // Cycle location
+                } else if (alertCounter % 2 === 0) {
+                    // 3. Tier 2: Wildlife Alert
+                    logAlert(t.wildlifeAlertMsg, false);
+                }
+                // No alert 1/4 of the time
+            }, 5000); // Check for a simulated alert every 5 seconds
+        }
+
+        // Updates all text elements based on the selected language
+        function setLanguage(lang) {
+            const t = translations[lang];
+            if (!t) return;
+
+            // Simple text updates
+            document.getElementById('motto').textContent = t.motto;
+            document.getElementById('langTitle').textContent = `${t.langTitle} / ${translations.en.langTitle}`;
+            document.getElementById('connStatusLabel').textContent = t.connStatusLabel;
+            document.getElementById('connectButton').textContent = t.connect;
+            document.getElementById('strobeLabel').textContent = t.strobeLabel;
+            document.getElementById('tier1Title').textContent = t.tier1Title;
+            document.getElementById('tier2Title').textContent = t.tier2Title;
+            document.getElementById('tier3Title').textContent = t.tier3Title;
+            document.getElementById('powerTitle').textContent = t.powerTitle;
+            document.getElementById('usageLabel').textContent = t.usageLabel;
+            document.getElementById('leftLabel').textContent = t.leftLabel;
+
+            // Update low battery warning if needed
+            if (powerLeft <= 15) {
+                batteryWarning.textContent = t.lowBattery;
+            } else {
+                batteryWarning.textContent = '';
+            }
+
+
+            // Dynamic status updates (needs to be checked against current state)
+            if (isConnected) {
+                connectionStatusElement.textContent = t.connected;
+                // Update Strobe status based on current index
+                updateStrobeStatus(strobeStatusKeys[strobeStatusIndex]);
+            } else {
+                 connectionStatusElement.textContent = t.disconnected;
+                 strobeStatusElement.textContent = t.strobeInactive;
+                 updateStrobeStatus('strobeInactive');
+            }
+            
+            // Update initial alert messages
+            const t2Init = document.getElementById('tier2Initial');
+            if (t2Init) t2Init.textContent = t.tier2Initial;
+            
+            const t3Init = document.getElementById('tier3Initial');
+            if (t3Init) t3Init.textContent = t.tier3Initial;
+            
+            // Update active button state
+            langButtons.forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-lang="${lang}"]`).classList.add('active');
+
+            currentLanguage = lang;
+        }
+
+        // Simulates the BLE connection process
+        function connectBLE() {
+            if (isConnected) return;
+            
+            // Clear existing timers
+            clearInterval(simulationTimer);
+            clearInterval(powerTimer);
+
+            // Reset Power
+            powerLeft = 100.0;
+            powerUsageValue.textContent = `-- W`;
+            powerLeftValue.textContent = `-- %`;
+            powerBar.style.width = `0%`;
+            batteryWarning.classList.add('hidden');
+
+
+            // Start connection state
+            connectButton.disabled = true;
+            connectButton.textContent = translations[currentLanguage].connecting;
+            connectionStatusElement.textContent = translations[currentLanguage].connecting;
+            connectionStatusElement.classList.remove('text-red-500', 'text-green-600');
+            connectionStatusElement.classList.add('text-blue-500');
+
+            // --- Simulation Logic ---
+            setTimeout(() => {
+                const success = Math.random() > 0.1; 
+
+                if (success) {
+                    isConnected = true;
+                    connectionStatusElement.textContent = translations[currentLanguage].connected;
+                    connectionStatusElement.classList.remove('text-blue-500', 'text-red-500');
+                    connectionStatusElement.classList.add('text-green-600');
+                    connectButton.textContent = translations[currentLanguage].connected;
+                    
+                    // Simulate status read (Tier 1 & Power)
+                    setTimeout(() => {
+                        // Start status updates and power simulation
+                        updateStrobeStatus('strobeStatusChecking');
+                        simulateAlerts();
+                        simulatePower();
+
+                    }, 1500); 
+
+                } else {
+                    // Connection failure
+                    isConnected = false;
+                    connectionStatusElement.textContent = translations[currentLanguage].disconnected;
+                    connectionStatusElement.classList.remove('text-blue-500', 'text-green-600');
+                    connectionStatusElement.classList.add('text-red-500');
+                    connectButton.textContent = translations[currentLanguage].connect;
+                }
+                connectButton.disabled = false;
+            }, 3000); 
+        }
+
+        // --- Event Listeners ---
+        connectButton.addEventListener('click', connectBLE);
+        
+        langButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const newLang = button.getAttribute('data-lang');
+                setLanguage(newLang);
+                
+                // If connected, restart simulation to update alert message text
+                if (isConnected) {
+                    clearInterval(simulationTimer);
+                    simulateAlerts();
+                }
+            });
+        });
+
+        // Initialize with default English text
+        document.addEventListener('DOMContentLoaded', () => {
+            setLanguage('en');
+        });
+    </script>
+</body>
+</html>
